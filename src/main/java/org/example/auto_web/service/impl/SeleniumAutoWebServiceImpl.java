@@ -842,7 +842,16 @@ public class SeleniumAutoWebServiceImpl implements SeleniumAutoWebService {
                     case "H": case "I": case "J": case "K": case "L": case "M": case "N":
                     case "O": case "P": case "Q": case "R": case "S": case "T": case "U":
                     case "V": case "W": case "X": case "Y": case "Z":
+                        // 将大写字母转换为小写，因为 sendKeys 需要小写字母
+                        actions.sendKeys(key.toLowerCase());
+                        break;
+                    case "0": case "1": case "2": case "3": case "4":
+                    case "5": case "6": case "7": case "8": case "9":
+                        // 添加数字键支持
                         actions.sendKeys(key);
+                        break;
+                    case "SPACE":
+                        actions.sendKeys(Keys.SPACE);
                         break;
                     default:
                         logInfo("不支持的按键: " + key);
