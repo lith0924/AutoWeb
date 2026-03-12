@@ -622,7 +622,6 @@
 </div>
 
 <div id="toast" class="toast"></div>
-
 <script>
     // ================= WebSocket 实时日志 =================
     let logWebSocket = null;
@@ -664,31 +663,26 @@
                 reconnectAttempts = 0;
                 updateWebSocketStatus('connected', '🟢 已连接');
                 log('🔗 WebSocket 连接已建立，开始接收实时日志...', 'data');
-                console.log('WebSocket connected to:', wsUrl);
             };
 
             logWebSocket.onmessage = function(event) {
                 const logMessage = event.data;
-
                 let message = logMessage;
                 let level = 'info';
 
-                // --- 修复点：基于后端新前缀进行解析，新增 ERROR 级别 ---
                 if (logMessage.startsWith('[INFO]')) {
                     level = 'info';
                     message = logMessage.substring(6).trim();
                 } else if (logMessage.startsWith('[DATA]')) {
                     level = 'data';
                     message = logMessage.substring(6).trim();
-                } else if (logMessage.startsWith('[ERROR]')) { // <-- 新增 ERROR 解析
+                } else if (logMessage.startsWith('[ERROR]')) {
                     level = 'error';
                     message = logMessage.substring(7).trim();
                 } else if (logMessage.includes('Exception') || logMessage.includes('WARN')) {
-                    level = 'error'; // 明确将异常和警告视为 error 级别
+                    level = 'error';
                     message = logMessage;
                 }
-                // --- 结束修复点 ---
-
                 log(message, level);
             };
 
@@ -697,21 +691,18 @@
                     isWebSocketConnected = false;
                     updateWebSocketStatus('disconnected', '🔴 连接断开');
                     log('❌ WebSocket 连接已断开', 'info');
-                    console.log('WebSocket disconnected');
                     handleReconnect();
                 }
             };
 
             logWebSocket.onerror = function(error) {
                 updateWebSocketStatus('disconnected', '🔴 连接错误');
-                log('❌ WebSocket 连接错误', 'error'); // 使用 error 级别
-                console.error('WebSocket error:', error);
+                log('❌ WebSocket 连接错误', 'error');
                 if (logWebSocket) logWebSocket.close();
             };
 
         } catch (error) {
-            console.error('WebSocket init error:', error);
-            log('❌ WebSocket 初始化失败: ' + error.message, 'error'); // 使用 error 级别
+            log('❌ WebSocket 初始化失败: ' + error.message, 'error');
             updateWebSocketStatus('disconnected', '🔴 连接失败');
             handleReconnect();
         }
@@ -720,10 +711,8 @@
     function updateWebSocketStatus(status, text) {
         const statusEl = document.getElementById('wsStatus');
         const logStatusEl = document.getElementById('logWsStatus');
-        statusEl.className = 'ws-status ' + status;
-        statusEl.textContent = text;
-        logStatusEl.className = 'ws-status ' + status;
-        logStatusEl.textContent = text;
+        if(statusEl) { statusEl.className = 'ws-status ' + status; statusEl.textContent = text; }
+        if(logStatusEl) { logStatusEl.className = 'ws-status ' + status; logStatusEl.textContent = text; }
     }
 
     function handleReconnect() {
@@ -738,23 +727,20 @@
                     initWebSocket();
                 }, delay);
             } else {
-                log('❌ 重连次数已达上限，请手动重连或刷新页面', 'error'); // 使用 error 级别
+                log('❌ 重连次数已达上限，请手动重连或刷新页面', 'error');
             }
         }
     }
 
     function reconnectWebSocket() {
         if (logWebSocket) {
-            try {
-                logWebSocket.close(1000, "User manual reconnect");
-            } catch (e) { /* ignored */ }
+            try { logWebSocket.close(1000, "User manual reconnect"); } catch (e) { }
         }
         logWebSocket = null;
         isWebSocketConnected = false;
         reconnectAttempts = 0;
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
-
         log('手动重连中...', 'info');
         initWebSocket();
     }
@@ -801,11 +787,7 @@
         'cpp': 'C++ (Selenium)',
         'go': 'Go (Selenium)'
     };
-    const LEVEL_TO_BADGE = {
-        'info': 'INFO',
-        'data': 'DATA',
-        'error': 'ERROR'
-    };
+    const LEVEL_TO_BADGE = { 'info': 'INFO', 'data': 'DATA', 'error': 'ERROR' };
 
     let taskData = { "url": "", "steps": [] };
     let currentGeneratedCode = null;
@@ -816,16 +798,17 @@
     let draggingStep = null;
     let draggingStepsList = null;
 
+    // ================= 初始化 =================
     window.addEventListener('load', function() {
         renderAll();
         loadSupportedLanguages();
         initWebSocket();
         setupLogFilters();
+        initFileDragDrop(); // 初始化文件拖拽功能
     });
 
     document.getElementById('rootUrl').addEventListener('input', (e) => taskData.url = e.target.value);
 
-    // 在页面关闭时清理 WebSocket
     window.addEventListener('beforeunload', function() {
         if (logWebSocket && logWebSocket.readyState === WebSocket.OPEN) {
             logWebSocket.close(1000, "Client closed page");
@@ -837,6 +820,7 @@
         document.getElementById('logSearch').addEventListener('input', filterLogs);
     }
 
+    // ================= 语言列表加载 =================
     async function loadSupportedLanguages() {
         try {
             const response = await fetch(API_URLS.SUPPORTED_LANGUAGES);
@@ -850,7 +834,7 @@
             supportedLanguages = ['java', 'python', 'cpp', 'go'];
             log("无法连接后端，使用默认语言列表", "info");
         }
-
+        // 确保 Java 在第一个
         const javaIndex = supportedLanguages.indexOf('java');
         if (javaIndex > -1) {
             supportedLanguages.splice(javaIndex, 1);
@@ -858,7 +842,6 @@
         } else if (!supportedLanguages.includes('java')) {
             supportedLanguages.unshift('java');
         }
-
         renderLanguageSelect();
     }
 
@@ -875,6 +858,7 @@
         if(supportedLanguages.length > 0) select.value = supportedLanguages[0];
     }
 
+    // ================= 标签页切换 =================
     function switchTab(tabId) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -890,12 +874,12 @@
         }
     }
 
+    // ================= 渲染核心逻辑 =================
     function renderAll() {
         const container = document.getElementById('stepsContainer');
         container.innerHTML = '';
-        // 渲染根步骤
         renderSteps(taskData.steps, container, false);
-        initDragAndDrop(); // 重新渲染后，重新绑定拖拽事件
+        initDragAndDrop();
     }
 
     function createField(step, label, key, placeholder, type = 'text', hint = '') {
@@ -910,7 +894,6 @@
         input.oninput = (e) => {
             const val = type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value;
             step[key] = val;
-            // 如果是备注字段，更新头部显示
             if(key === 'remark') {
                 const card = e.target.closest('.step-card');
                 if (card) {
@@ -942,15 +925,12 @@
             card.stepData = step;
             card.stepsList = steps;
 
-            // --- 头部 (可拖拽区域) ---
+            // --- 头部 ---
             const header = document.createElement('div');
             header.className = 'step-header';
             header.draggable = true;
-
-            // 绑定拖拽事件到 header
             header.addEventListener('dragstart', handleDragStart);
             header.addEventListener('dragend', handleDragEnd);
-
 
             const leftHeader = document.createElement('div');
             leftHeader.style.display = 'flex';
@@ -970,7 +950,6 @@
             typeSelect.onchange = (e) => {
                 step.type = e.target.value;
                 if (NESTABLE_TYPES.includes(step.type) && !step.subSteps) step.subSteps = [];
-                // 强制重新渲染，因为字段会变化
                 renderAll();
             };
             leftHeader.appendChild(typeSelect);
@@ -997,7 +976,7 @@
             header.appendChild(delBtn);
             card.appendChild(header);
 
-            // --- 表单生成器 ---
+            // --- 表单内容 ---
             const grid = document.createElement('div');
             grid.className = 'form-grid';
 
@@ -1006,20 +985,18 @@
             const t = step.type;
             const elements = [];
 
-            // --- START MODIFICATION ---
-            // 移除了 KEYBOARD_INPUT
+            // 1. XPath (部分类型不需要)
             const noXpathTypes = ['WAIT', 'CLOSE_TAB', 'GO_BACK', 'NAVIGATE', 'DYNAMIC_LOOP', 'IMPORT_COOKIE', 'GET_CURRENT_URL', 'HANDLE_ALERT', 'PRESS_KEYS'];
             if (!noXpathTypes.includes(t)) {
-                // --- END MODIFICATION ---
                 elements.push(createField(step, 'XPath / 定位符', 'xpath', '//div[@id="btn"]'));
 
-                // === 占位符提示 ===
-                const needsPrompt = ['INPUT', 'CLICK', 'GET_TEXT'].includes(t) || t === 'KEYBOARD_INPUT'; // KEYBOARD_INPUT 可能会用到占位符
+                // 占位符提示
+                const needsPrompt = ['INPUT', 'CLICK', 'GET_TEXT'].includes(t) || t === 'KEYBOARD_INPUT';
                 const isLoopType = t.startsWith('LOOP');
 
                 if (isNested || isLoopType || needsPrompt) {
                     const hintDiv = document.createElement('div');
-                    hintDiv.style.gridColumn = '1 / -1'; // 跨列显示
+                    hintDiv.style.gridColumn = '1 / -1';
                     hintDiv.style.fontSize = '0.85rem';
                     hintDiv.style.color = 'var(--primary)';
                     hintDiv.style.backgroundColor = '#e0f2fe';
@@ -1028,23 +1005,18 @@
                     hintDiv.style.borderLeft = '3px solid var(--primary)';
 
                     let baseHint = '💡 提示：XPath/输入内容 默认支持 {i}, {index} 占位符。';
-
-                    if (isLoopType) {
-                        baseHint += '  (循环步骤内置, 默认值 1) ';
-                    } else if (t === 'DYNAMIC_LOOP') {
-                        baseHint += '  (默认值 0) ';
-                    } else if (needsPrompt && isNested) {
-                        baseHint += ' (作为子步骤，可以使用动态循环的占位符操作元素)';
-                    }
+                    if (isLoopType) baseHint += '  (循环步骤内置, 默认值 1) ';
+                    else if (t === 'DYNAMIC_LOOP') baseHint += '  (默认值 0) ';
+                    else if (needsPrompt && isNested) baseHint += ' (作为子步骤，可以使用动态循环的占位符操作元素)';
 
                     if (needsPrompt || isLoopType || t === 'DYNAMIC_LOOP') {
                         hintDiv.innerHTML = baseHint;
                         elements.push(hintDiv);
                     }
                 }
-                // =================================
             }
 
+            // 2. Value 字段
             const hasValueField = ['INPUT', 'NAVIGATE', 'LOOP_INPUT', 'DYNAMIC_LOOP', 'LOOP_TASK', 'PRESS_KEYS', 'KEYBOARD_INPUT'].includes(t) || step.value !== undefined;
             if (hasValueField) {
                 let label = '值 / 参数';
@@ -1054,49 +1026,49 @@
                 if (t === 'NAVIGATE') { label = '跳转 URL 地址'; ph = 'https://...'; }
                 else if (t === 'INPUT' || t === 'LOOP_INPUT') { label = '输入内容'; ph = '要输入的文本'; }
                 else if (t === 'PRESS_KEYS') { label = '按键组合'; ph = '例如：CTRL+A (全选)'; hint = '支持组合键，如 CONTROL, ALT, SHIFT'; }
-                else if (t === 'KEYBOARD_INPUT') { label = '输入内容'; ph = '直接敲击键盘的内容'; hint = '可以穿插按键代码，如：Hello{ENTER}World. **需要XPath指定输入框**'; } // 提示 XPath 需求
+                else if (t === 'KEYBOARD_INPUT') { label = '输入内容'; ph = '直接敲击键盘的内容'; hint = '可以穿插按键代码，如：Hello{ENTER}World. **需要XPath指定输入框**'; }
+                else if (t === 'DYNAMIC_LOOP') {
+                    label = '自定义占位符名称';
+                    ph = '例如：placeholder_name';
+                    hint = '循环时，此占位符名称可用于子步骤的 XPath/值 中。';
+                }
 
                 elements.push(createField(step, label, 'value', ph, 'text', hint));
             }
 
+            // 3. 特殊类型字段
             if (t === 'HANDLE_ALERT') {
                 elements.push(createField(step, '输入弹窗文本 (可选)', 'alertText', '若弹窗需要输入，请填写'));
-
                 const divAlert = document.createElement('div');
                 divAlert.className = 'form-group';
                 divAlert.innerHTML = `<label>处理方式</label>`;
                 const sel = document.createElement('select');
                 const optYes = document.createElement('option'); optYes.value = 'true'; optYes.text = '确认 / 接受 (Accept)';
                 const optNo = document.createElement('option'); optNo.value = 'false'; optNo.text = '取消 / 拒绝 (Dismiss)';
-
-                if (step.acceptAlert === false || step.acceptAlert === 'false') {
-                    optNo.selected = true;
-                    step.acceptAlert = false;
-                } else {
-                    optYes.selected = true;
-                    step.acceptAlert = true;
-                }
-
-                sel.appendChild(optYes);
-                sel.appendChild(optNo);
+                if (step.acceptAlert === false || step.acceptAlert === 'false') { optNo.selected = true; step.acceptAlert = false; }
+                else { optYes.selected = true; step.acceptAlert = true; }
+                sel.appendChild(optYes); sel.appendChild(optNo);
                 sel.onchange = (e) => { step.acceptAlert = (e.target.value === 'true'); };
                 divAlert.appendChild(sel);
                 elements.push(divAlert);
             }
 
-            if (t === 'IMPORT_COOKIE') {
-                elements.push(createField(step, 'Cookie 文件路径', 'filePath', 'C:/cookies.txt'));
-            }
+            if (t === 'IMPORT_COOKIE') elements.push(createField(step, 'Cookie 文件路径', 'filePath', 'C:/cookies.txt'));
+            if (t === 'LOOP_GET_TEXT') elements.push(createField(step, '输出文件路径', 'filePath', 'output/text_list.txt', 'text', '抓取的文本将追加写入此文件'));
 
-            if (t === 'LOOP_GET_TEXT') {
-                elements.push(createField(step, '输出文件路径', 'filePath', 'output/text_list.txt', 'text', '抓取的文本将追加写入此文件'));
-            }
-
+            // 4. 循环控制 (含新增的 increment)
             const isLoop = t.startsWith('LOOP') || t === 'DYNAMIC_LOOP';
             if (isLoop) {
                 if (['DYNAMIC_LOOP', 'LOOP_TASK'].includes(t)) {
                     if (step.iterations === undefined) step.iterations = 3;
                     elements.push(createField(step, '循环次数', 'iterations', '3', 'number'));
+
+                    // === 修改点：新增动态循环增量 ===
+                    if (t === 'DYNAMIC_LOOP') {
+                        if (step.increment === undefined) step.increment = 1;
+                        elements.push(createField(step, '增量 (Step)', 'increment', '1', 'number', '每次循环增加的数值'));
+                    }
+                    // ==============================
                 } else {
                     if (step.startIndex === undefined) step.startIndex = 1;
                     if (step.endIndex === undefined) step.endIndex = 5;
@@ -1105,30 +1077,24 @@
                 }
             }
 
-            // 确保 waitBeforeMs 和 waitAfterMs 定义
+            // 5. 等待时间
             if (step.waitBeforeMs === undefined) step.waitBeforeMs = 0;
             if (step.waitAfterMs === undefined) step.waitAfterMs = 500;
-
-            // 将等待时间放在最后
             elements.push(createField(step, '前置等待(ms)', 'waitBeforeMs', '0', 'number'));
             elements.push(createField(step, '后置等待(ms)', 'waitAfterMs', '500', 'number'));
 
             elements.forEach(el => grid.appendChild(el));
-
             card.appendChild(grid);
 
-            // --- 嵌套子步骤 ---
+            // --- 嵌套区域 ---
             if (NESTABLE_TYPES.includes(t)) {
                 const nestedArea = document.createElement('div');
                 nestedArea.className = 'nested-area';
-
-                //  拖拽：设置 nestedArea 为拖放目标容器
                 nestedArea.stepsList = step.subSteps;
                 nestedArea.classList.add('steps-list');
                 nestedArea.addEventListener('dragover', handleDragOver);
                 nestedArea.addEventListener('dragleave', handleDragLeave);
                 nestedArea.addEventListener('drop', handleDrop);
-
 
                 const nestedHead = document.createElement('div');
                 nestedHead.style.display = 'flex';
@@ -1150,7 +1116,7 @@
                 nestedArea.appendChild(nestedHead);
 
                 if (step.subSteps && step.subSteps.length > 0) {
-                    renderSteps(step.subSteps, nestedArea, true); // 递归调用，设置 isNested 为 true
+                    renderSteps(step.subSteps, nestedArea, true);
                 } else {
                     const tip = document.createElement('div');
                     tip.style.color = '#94a3b8';
@@ -1165,23 +1131,55 @@
         });
     }
 
-    //  新增/更新：拖拽功能初始化
+    // ================= 文件拖拽导入 (新增) =================
+    function initFileDragDrop() {
+        const dropZone = document.body;
+
+        dropZone.addEventListener('dragover', (e) => {
+            // 检查是否拖拽的是文件
+            if (e.dataTransfer.types.includes('Files')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                // 可选：添加视觉反馈，例如 body 变暗
+                // document.body.style.backgroundColor = '#eef2ff';
+            }
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            // document.body.style.backgroundColor = '';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            if (e.dataTransfer.types.includes('Files')) {
+                e.preventDefault();
+                // document.body.style.backgroundColor = '';
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    if (file.name.endsWith('.json')) {
+                        importFileContent(file);
+                    } else {
+                        showToast('❌ 请拖入 JSON 格式的配置文件', 'warning');
+                    }
+                }
+            }
+        });
+    }
+
+    // ================= 拖拽排序逻辑 =================
     function initDragAndDrop() {
         const rootContainer = document.getElementById('stepsContainer');
         rootContainer.classList.add('steps-list');
-
-        // 确保根容器也是拖放目标
         rootContainer.addEventListener('dragover', handleDragOver);
         rootContainer.addEventListener('dragleave', handleDragLeave);
         rootContainer.addEventListener('drop', handleDrop);
         rootContainer.stepsList = taskData.steps;
-
     }
 
     function handleDragStart(e) {
         const header = e.currentTarget;
         const card = header.closest('.step-card');
-
         if (!card) return;
 
         draggingStep = card.stepData;
@@ -1192,8 +1190,7 @@
         card.classList.add('dragging');
 
         const dragImg = document.createElement('div');
-        dragImg.style.width = '1px';
-        dragImg.style.height = '1px';
+        dragImg.style.width = '1px'; dragImg.style.height = '1px';
         e.dataTransfer.setDragImage(dragImg, 0, 0);
     }
 
@@ -1205,49 +1202,42 @@
     }
 
     function handleDragOver(e) {
+        // 如果是文件拖拽，交给 initFileDragDrop 处理，这里只处理步骤排序
+        if (e.dataTransfer.types.includes('Files')) return;
+
         e.preventDefault();
         if (!e.target.closest('.steps-list') || !draggingStep) return;
 
         const container = e.currentTarget;
         e.dataTransfer.dropEffect = 'move';
-
-        // 移除旧的指示器
         container.querySelectorAll('.drag-over-indicator').forEach(i => i.remove());
-
-        // 查找最接近的步骤卡片
         const afterElement = getDragAfterElement(container, e.clientY);
-
-        // 创建新的指示器
         const indicator = document.createElement('div');
         indicator.className = 'drag-over-indicator';
 
         if (afterElement == null) {
-            // 放置在列表末尾
             container.appendChild(indicator);
         } else if (afterElement.classList.contains('step-card')) {
-            // 放置在某个卡片之前
             container.insertBefore(indicator, afterElement);
         } else if (container.id === 'stepsContainer' || container.classList.contains('nested-area')) {
-            // 放置在空容器或嵌套区的头部 (afterElement为null)
             const firstCard = Array.from(container.children).find(c => c.classList.contains('step-card'));
-            if (firstCard) {
-                container.insertBefore(indicator, firstCard);
-            } else {
+            if (firstCard) { container.insertBefore(indicator, firstCard); }
+            else {
                 const nestedHead = container.querySelector('strong');
-                if(nestedHead && nestedHead.parentNode) {
-                    container.appendChild(indicator);
-                } else {
-                    container.appendChild(indicator);
-                }
+                if(nestedHead && nestedHead.parentNode) { container.appendChild(indicator); }
+                else { container.appendChild(indicator); }
             }
         }
     }
 
     function handleDragLeave(e) {
+        if (e.dataTransfer.types.includes('Files')) return;
         e.currentTarget.querySelectorAll('.drag-over-indicator').forEach(i => i.remove());
     }
 
     function handleDrop(e) {
+        if (e.dataTransfer.types.includes('Files')) return; // 文件拖拽不在此处理
+
         e.preventDefault();
         const dropTarget = e.currentTarget;
         dropTarget.querySelectorAll('.drag-over-indicator').forEach(i => i.remove());
@@ -1260,84 +1250,47 @@
         const oldIndex = currentList.indexOf(draggingStep);
         let newIndex = -1;
 
-        // 确定放置位置
         const afterElement = getDragAfterElement(dropTarget, e.clientY);
 
-        // 如果拖拽的是嵌套步骤到根步骤，或反之，需要进行数组间的移动。
         if (currentList !== targetList) {
-            // 1. 从原数组移除
             currentList.splice(oldIndex, 1);
             log(`步骤 [${draggingStep.remark}] 从原列表移除`, 'info');
-
-            // 2. 确定新索引
-            // 需要过滤出属于目标数组的步骤卡片
             const cards = Array.from(dropTarget.querySelectorAll('.step-card')).filter(c => c.stepsList === targetList);
-            if (afterElement === null) {
-                newIndex = targetList.length; // 放在末尾
-            } else {
-                // 确保 afterElement 是目标列表中的一个卡片
+            if (afterElement === null) { newIndex = targetList.length; }
+            else {
                 const targetCard = afterElement.closest('.step-card');
-                if (targetCard && targetCard.stepsList === targetList) {
-                    newIndex = targetList.indexOf(targetCard.stepData);
-                } else {
-                    newIndex = targetList.length; // 找不到目标卡片，默认末尾
-                }
+                if (targetCard && targetCard.stepsList === targetList) { newIndex = targetList.indexOf(targetCard.stepData); }
+                else { newIndex = targetList.length; }
             }
-
-            // 3. 插入到新数组
             targetList.splice(newIndex, 0, draggingStep);
-            log(`步骤 [${draggingStep.remark}] 移动到新列表索引 ${newIndex}`, 'info');
-
         } else {
-            // 数组内移动
-            if (afterElement === null) {
-                newIndex = currentList.length - 1; // 放在末尾
-            } else {
+            if (afterElement === null) { newIndex = currentList.length - 1; }
+            else {
                 const targetCard = afterElement.closest('.step-card');
                 newIndex = currentList.indexOf(targetCard.stepData);
             }
-
-            // 执行数组移动操作
-            if (oldIndex < newIndex) {
-                newIndex--; // 如果是从上往下拖，目标索引需要减1
-            }
-
-            // 只有当位置确实发生变化时才操作数组
+            if (oldIndex < newIndex) { newIndex--; }
             if (oldIndex !== newIndex) {
                 const [removed] = currentList.splice(oldIndex, 1);
                 currentList.splice(newIndex, 0, removed);
-                log(`步骤 [${removed.remark}] 移动到索引 ${newIndex}`, 'info');
             }
         }
-
-        // 重新渲染整个步骤列表以同步数据和界面
         renderAll();
     }
 
-    // 查找拖拽位置后面的元素
     function getDragAfterElement(container, y) {
-        // 查找所有非拖拽中的步骤卡片
         const draggableElements = Array.from(container.querySelectorAll('.step-card:not(.dragging)'));
-
         return draggableElements.reduce((closest, child) => {
             const box = child.getBoundingClientRect();
             const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
+            if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; }
+            else { return closest; }
         }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
-
+    // ================= 操作按钮 =================
     function addRootStep() {
-        taskData.steps.push({
-            type: 'WAIT',
-            waitBeforeMs: 0,
-            waitAfterMs: 1000,
-            remark: '新步骤'
-        });
+        taskData.steps.push({ type: 'WAIT', waitBeforeMs: 0, waitAfterMs: 1000, remark: '新步骤' });
         renderAll();
         setTimeout(() => {
             const container = document.getElementById('stepsContainer');
@@ -1345,12 +1298,10 @@
         }, 100);
     }
 
-
     function exportJson() {
         taskData.url = document.getElementById('rootUrl').value;
         const fileNameInput = document.getElementById('exportFileName').value.trim();
         const fileName = fileNameInput ? fileNameInput : `auto_config_${Date.now()}`;
-
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(taskData, null, 2));
         const anchor = document.createElement('a');
         anchor.href = dataStr;
@@ -1364,6 +1315,12 @@
     function handleFileImport(input) {
         const file = input.files[0];
         if (!file) return;
+        importFileContent(file);
+        input.value = '';
+    }
+
+    // 抽离出的公共导入逻辑
+    function importFileContent(file) {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
@@ -1373,7 +1330,7 @@
                     document.getElementById('rootUrl').value = taskData.url || '';
                     renderAll();
                     showToast('✅ 导入成功', 'success');
-                    log("成功导入 JSON 配置", "info");
+                    log(`成功导入配置文件: ${file.name}`, "info");
                 } else {
                     showToast('❌ JSON 格式错误', 'error');
                     log("导入失败: JSON 缺少 steps 数组", "error");
@@ -1382,12 +1339,11 @@
                 showToast('❌ 解析失败', 'error');
                 log(`导入失败: ${err.message}`, "error");
             }
-            input.value = '';
         };
         reader.readAsText(file);
     }
 
-
+    // ================= API 请求 =================
     async function validateSteps() {
         log("开始校验流程...", "info");
         await sendTaskRequest(API_URLS.VALIDATE, "校验");
@@ -1395,26 +1351,18 @@
 
     async function executeSteps() {
         if(!confirm("⚠️ 确定要开始执行任务吗？浏览器将自动操作。")) return;
-
         if (!isWebSocketConnected) {
             log('⚠️ WebSocket 未连接，将无法接收实时日志', 'warning');
             if (!confirm('实时日志连接异常，是否继续执行？')) return;
         }
-
         log("任务开始执行...", "info");
         await sendTaskRequest(API_URLS.EXECUTE, "执行");
     }
 
     async function sendTaskRequest(url, actionName) {
         taskData.url = document.getElementById('rootUrl').value;
-        if (!taskData.url) {
-            log("错误: 未填写起始 URL", "error");
-            return showToast('请填写起始 URL', 'error');
-        }
-        if (taskData.steps.length === 0) {
-            log("错误: 步骤列表为空", "error");
-            return showToast('步骤不能为空', 'error');
-        }
+        if (!taskData.url) { log("错误: 未填写起始 URL", "error"); return showToast('请填写起始 URL', 'error'); }
+        if (taskData.steps.length === 0) { log("错误: 步骤列表为空", "error"); return showToast('步骤不能为空', 'error'); }
 
         showToast(`⏳ 正在${actionName}...`, 'primary', 2000);
 
@@ -1439,28 +1387,18 @@
         }
     }
 
-
     async function exportCookie() {
         const urlVal = document.getElementById('cookieUrl').value.trim();
         const waitVal = document.getElementById('cookieWait').value;
         const pathVal = document.getElementById('cookiePath').value.trim();
 
-        if (!urlVal || !waitVal || !pathVal) {
-            showToast('❌ 请填写所有必填字段', 'error');
-            return;
-        }
-
+        if (!urlVal || !waitVal || !pathVal) { showToast('❌ 请填写所有必填字段', 'error'); return; }
         if (!isWebSocketConnected) {
             log('⚠️ WebSocket 未连接，将无法接收实时日志', 'warning');
             if (!confirm('实时日志连接异常，是否继续执行？')) return;
         }
 
-        const req = {
-            url: urlVal,
-            waitSeconds: parseInt(waitVal),
-            filePath: pathVal
-        };
-
+        const req = { url: urlVal, waitSeconds: parseInt(waitVal), filePath: pathVal };
         showToast('⏳ 正在启动浏览器提取 Cookie...', 'primary', 5000);
         log(`启动 Cookie 提取任务: 目标=${urlVal}, 等待=${waitVal}s, 路径=${pathVal}`, "info");
 
@@ -1483,7 +1421,6 @@
             log(`Cookie 任务异常: ${e.message}`, "error");
         }
     }
-
 
     async function generateCodePreview() {
         if (taskData.steps.length === 0) return showToast('请先在"流程编排"中添加步骤', 'error');
@@ -1527,9 +1464,7 @@
                 showToast(`❌ 生成失败`, 'error');
                 log(`代码生成失败: ${err}`, "error");
             }
-        } catch (e) {
-            log(`请求错误: ${e.message}`, "error");
-        }
+        } catch (e) { log(`请求错误: ${e.message}`, "error"); }
     }
 
     async function downloadCode() {
@@ -1542,7 +1477,6 @@
             className: document.getElementById('codeClassName').value || "AutoTask",
             includeComments: document.getElementById('codeComments').checked
         };
-
         try {
             const res = await fetch(API_URLS.GENERATE_DOWNLOAD, {
                 method: 'POST',
@@ -1567,33 +1501,16 @@
 
     function copyCode() {
         if (!currentGeneratedCode) return;
-        navigator.clipboard.writeText(currentGeneratedCode).then(() => {
-            showToast('✅ 已复制', 'success');
-        });
+        navigator.clipboard.writeText(currentGeneratedCode).then(() => { showToast('✅ 已复制', 'success'); });
     }
-
 
     function log(message, level = 'info') {
         const now = new Date();
         const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
-
-        const logEntry = {
-            id: Date.now() + Math.random(),
-            time: timeStr,
-            message: message,
-            level: level,
-            timestamp: now.getTime()
-        };
-
+        const logEntry = { id: Date.now() + Math.random(), time: timeStr, message: message, level: level, timestamp: now.getTime() };
         logEntries.push(logEntry);
-
         updateLogStats(level);
-
-        // 只有当日志标签页是激活状态时才实时渲染，否则只更新数据
-        if (document.getElementById('tab-logs').classList.contains('active')) {
-            renderLogs();
-        }
-
+        if (document.getElementById('tab-logs').classList.contains('active')) { renderLogs(); }
         const consoleFunc = level === 'data' ? console.warn : (level === 'error' ? console.error : console.log);
         consoleFunc(`[${level.toUpperCase()}] ${timeStr}: ${message}`);
     }
@@ -1603,7 +1520,6 @@
         const levelFilter = document.getElementById('logLevelFilter').value;
         const searchTerm = document.getElementById('logSearch').value.toLowerCase();
 
-        //  更新统计显示，包含 ERROR
         document.getElementById('logTotal').textContent = `总计: ${logStats.total} 条`;
         document.getElementById('logInfo').textContent = `信息 (INFO): ${logStats.info} 条`;
         document.getElementById('logData').textContent = `数据 (DATA): ${logStats.data} 条`;
@@ -1611,9 +1527,7 @@
 
         const filteredLogs = logEntries.filter(entry => {
             const levelMatch = levelFilter === 'all' || entry.level === levelFilter;
-            const searchMatch = !searchTerm ||
-                entry.message.toLowerCase().includes(searchTerm) ||
-                entry.time.includes(searchTerm);
+            const searchMatch = !searchTerm || entry.message.toLowerCase().includes(searchTerm) || entry.time.includes(searchTerm);
             return levelMatch && searchMatch;
         });
 
@@ -1621,67 +1535,40 @@
         filteredLogs.forEach(entry => {
             const entryEl = document.createElement('div');
             entryEl.className = `log-entry ${entry.level}`;
-
             const timeSpan = `<span class="time">${entry.time}</span>`;
             const badge = `<span class="log-level-badge">${LEVEL_TO_BADGE[entry.level] || entry.level.toUpperCase()}</span>`;
-
             const messageBody = `<span class="log-message">${entry.message.replace(/\n/g, '<br>')}</span>`;
-
             entryEl.innerHTML = `${timeSpan}${badge}${messageBody}`;
             content.appendChild(entryEl);
         });
-
         content.scrollTop = content.scrollHeight;
     }
 
     function updateLogStats(level) {
         logStats.total++;
-        if (logStats.hasOwnProperty(level)) {
-            logStats[level]++;
-        }
+        if (logStats.hasOwnProperty(level)) { logStats[level]++; }
     }
 
-    function filterLogs() {
-        renderLogs();
-    }
-
-    function clearLog() {
-        logEntries = [];
-        // 清空 logStats 时包含 error
-        logStats = { total: 0, info: 0, data: 0, error: 0 };
-        renderLogs();
-        log('日志已清空', 'info');
-    }
+    function filterLogs() { renderLogs(); }
+    function clearLog() { logEntries = []; logStats = { total: 0, info: 0, data: 0, error: 0 }; renderLogs(); log('日志已清空', 'info'); }
 
     function exportLogs() {
-        if (logEntries.length === 0) {
-            showToast('没有日志可导出', 'warning');
-            return;
-        }
-
+        if (logEntries.length === 0) { showToast('没有日志可导出', 'warning'); return; }
         let logText = "自动化控制台系统日志导出\n";
         logText += `导出时间: ${new Date().toLocaleString()}\n`;
         logText += `日志总数: ${logStats.total} (信息:${logStats.info} 数据:${logStats.data} 错误:${logStats.error})\n\n`;
-
-        logEntries.forEach(entry => {
-            logText += `[${entry.time}] [${entry.level.toUpperCase()}] ${entry.message}\n`;
-        });
-
+        logEntries.forEach(entry => { logText += `[${entry.time}] [${entry.level.toUpperCase()}] ${entry.message}\n`; });
         const blob = new Blob([logText], { type: 'text/plain' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `automation_logs_${Date.now()}.txt`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-
+        a.href = url; a.download = `automation_logs_${Date.now()}.txt`;
+        a.click(); window.URL.revokeObjectURL(url);
         log(`日志已导出，共 ${logEntries.length} 条记录`, "info");
     }
 
     function showToast(msg, type = 'primary', duration = 3000) {
         const t = document.getElementById('toast');
-        t.innerText = msg;
-        t.style.display = 'block';
+        t.innerText = msg; t.style.display = 'block';
         let bg = 'var(--primary)';
         if(type === 'success') bg = 'var(--success)';
         if(type === 'error') bg = 'var(--danger)';
@@ -1690,5 +1577,1074 @@
         if (duration > 0) setTimeout(() => t.style.display = 'none', duration);
     }
 </script>
+
 </body>
 </html>
+
+<!--<script>-->
+<!--    // ================= WebSocket 实时日志 =================-->
+<!--    let logWebSocket = null;-->
+<!--    let isWebSocketConnected = false;-->
+<!--    let reconnectAttempts = 0;-->
+<!--    const MAX_RECONNECT_ATTEMPTS = 10;-->
+<!--    const RECONNECT_INTERVAL = 3000;-->
+<!--    let reconnectTimer = null;-->
+
+<!--    function initWebSocket() {-->
+<!--        if (logWebSocket) {-->
+<!--            try {-->
+<!--                if (logWebSocket.readyState === WebSocket.OPEN || logWebSocket.readyState === WebSocket.CONNECTING) {-->
+<!--                    logWebSocket.close(1000, "Initiating new connection/Reconnecting");-->
+<!--                }-->
+<!--            } catch (e) {-->
+<!--                console.warn("Attempted to close potentially broken WebSocket:", e);-->
+<!--            }-->
+<!--            logWebSocket = null;-->
+<!--            isWebSocketConnected = false;-->
+<!--        }-->
+
+<!--        if (reconnectTimer !== null) {-->
+<!--            clearTimeout(reconnectTimer);-->
+<!--            reconnectTimer = null;-->
+<!--        }-->
+
+<!--        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';-->
+<!--        // const wsUrl = `${protocol}//${window.location.host}/ws/logs`; // 生产环境-->
+<!--        const wsUrl = `ws://localhost:8082/ws/logs`; // 开发/测试环境-->
+
+<!--        updateWebSocketStatus('connecting', '🟡 连接中...');-->
+
+<!--        try {-->
+<!--            logWebSocket = new WebSocket(wsUrl);-->
+
+<!--            logWebSocket.onopen = function(event) {-->
+<!--                isWebSocketConnected = true;-->
+<!--                reconnectAttempts = 0;-->
+<!--                updateWebSocketStatus('connected', '🟢 已连接');-->
+<!--                log('🔗 WebSocket 连接已建立，开始接收实时日志...', 'data');-->
+<!--                console.log('WebSocket connected to:', wsUrl);-->
+<!--            };-->
+
+<!--            logWebSocket.onmessage = function(event) {-->
+<!--                const logMessage = event.data;-->
+
+<!--                let message = logMessage;-->
+<!--                let level = 'info';-->
+
+<!--                // -&#45;&#45; 修复点：基于后端新前缀进行解析，新增 ERROR 级别 -&#45;&#45;-->
+<!--                if (logMessage.startsWith('[INFO]')) {-->
+<!--                    level = 'info';-->
+<!--                    message = logMessage.substring(6).trim();-->
+<!--                } else if (logMessage.startsWith('[DATA]')) {-->
+<!--                    level = 'data';-->
+<!--                    message = logMessage.substring(6).trim();-->
+<!--                } else if (logMessage.startsWith('[ERROR]')) { // <&#45;&#45; 新增 ERROR 解析-->
+<!--                    level = 'error';-->
+<!--                    message = logMessage.substring(7).trim();-->
+<!--                } else if (logMessage.includes('Exception') || logMessage.includes('WARN')) {-->
+<!--                    level = 'error'; // 明确将异常和警告视为 error 级别-->
+<!--                    message = logMessage;-->
+<!--                }-->
+<!--                // -&#45;&#45; 结束修复点 -&#45;&#45;-->
+
+<!--                log(message, level);-->
+<!--            };-->
+
+<!--            logWebSocket.onclose = function(event) {-->
+<!--                if (isWebSocketConnected) {-->
+<!--                    isWebSocketConnected = false;-->
+<!--                    updateWebSocketStatus('disconnected', '🔴 连接断开');-->
+<!--                    log('❌ WebSocket 连接已断开', 'info');-->
+<!--                    console.log('WebSocket disconnected');-->
+<!--                    handleReconnect();-->
+<!--                }-->
+<!--            };-->
+
+<!--            logWebSocket.onerror = function(error) {-->
+<!--                updateWebSocketStatus('disconnected', '🔴 连接错误');-->
+<!--                log('❌ WebSocket 连接错误', 'error'); // 使用 error 级别-->
+<!--                console.error('WebSocket error:', error);-->
+<!--                if (logWebSocket) logWebSocket.close();-->
+<!--            };-->
+
+<!--        } catch (error) {-->
+<!--            console.error('WebSocket init error:', error);-->
+<!--            log('❌ WebSocket 初始化失败: ' + error.message, 'error'); // 使用 error 级别-->
+<!--            updateWebSocketStatus('disconnected', '🔴 连接失败');-->
+<!--            handleReconnect();-->
+<!--        }-->
+<!--    }-->
+
+<!--    function updateWebSocketStatus(status, text) {-->
+<!--        const statusEl = document.getElementById('wsStatus');-->
+<!--        const logStatusEl = document.getElementById('logWsStatus');-->
+<!--        statusEl.className = 'ws-status ' + status;-->
+<!--        statusEl.textContent = text;-->
+<!--        logStatusEl.className = 'ws-status ' + status;-->
+<!--        logStatusEl.textContent = text;-->
+<!--    }-->
+
+<!--    function handleReconnect() {-->
+<!--        if (reconnectTimer === null && !isWebSocketConnected) {-->
+<!--            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {-->
+<!--                reconnectAttempts++;-->
+<!--                const delay = RECONNECT_INTERVAL * Math.min(reconnectAttempts, 3);-->
+<!--                log(`🔄 ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} 尝试重新连接 (${delay}ms后)...`, 'info');-->
+
+<!--                reconnectTimer = setTimeout(() => {-->
+<!--                    reconnectTimer = null;-->
+<!--                    initWebSocket();-->
+<!--                }, delay);-->
+<!--            } else {-->
+<!--                log('❌ 重连次数已达上限，请手动重连或刷新页面', 'error'); // 使用 error 级别-->
+<!--            }-->
+<!--        }-->
+<!--    }-->
+
+<!--    function reconnectWebSocket() {-->
+<!--        if (logWebSocket) {-->
+<!--            try {-->
+<!--                logWebSocket.close(1000, "User manual reconnect");-->
+<!--            } catch (e) { /* ignored */ }-->
+<!--        }-->
+<!--        logWebSocket = null;-->
+<!--        isWebSocketConnected = false;-->
+<!--        reconnectAttempts = 0;-->
+<!--        clearTimeout(reconnectTimer);-->
+<!--        reconnectTimer = null;-->
+
+<!--        log('手动重连中...', 'info');-->
+<!--        initWebSocket();-->
+<!--    }-->
+
+
+<!--    // ================= 配置常量 =================-->
+<!--    const API_BASE = "http://localhost:8082";-->
+<!--    const API_URLS = {-->
+<!--        VALIDATE: `${API_BASE}/api/auto/validate`,-->
+<!--        EXECUTE: `${API_BASE}/api/auto/execute`,-->
+<!--        EXPORT_COOKIE: `${API_BASE}/api/auto/export-cookie`,-->
+<!--        GENERATE_PREVIEW: `${API_BASE}/api/code-generator/preview`,-->
+<!--        GENERATE_DOWNLOAD: `${API_BASE}/api/code-generator/generate`,-->
+<!--        SUPPORTED_LANGUAGES: `${API_BASE}/api/code-generator/supported-languages`-->
+<!--    };-->
+
+<!--    // ================= 汉化映射 =================-->
+<!--    const TYPE_LABELS = {-->
+<!--        "NAVIGATE": "🌐 导航跳转 (Navigate)",-->
+<!--        "INPUT": "⌨️ 输入文本 (Input)",-->
+<!--        "CLICK": "👆 点击元素 (Click)",-->
+<!--        "SWITCH_IFRAME": "🖼️ 切换 Iframe",-->
+<!--        "GET_CURRENT_URL": "🔗 获取当前 URL",-->
+<!--        "GET_TEXT": "📄 获取文本内容",-->
+<!--        "PRESS_KEYS": "🎹 按键模拟 (Press Keys)",-->
+<!--        "KEYBOARD_INPUT": "🖊️ 键盘直接输入",-->
+<!--        "WAIT": "⏳ 强制等待",-->
+<!--        "HANDLE_ALERT": "⚠️ 处理弹窗 (Alert)",-->
+<!--        "IMPORT_COOKIE": "🍪 导入 Cookie",-->
+<!--        "CLOSE_TAB": "❌ 关闭标签页",-->
+<!--        "GO_BACK": "⬅️ 浏览器后退",-->
+<!--        "LOOP_CLICK": "🔁 循环点击 (Loop Click)",-->
+<!--        "LOOP_INPUT": "🔁 循环输入 (Loop Input)",-->
+<!--        "LOOP_GET_TEXT": "🔁 循环获取文本",-->
+<!--        "LOOP_TASK": "🔄 循环任务 (简单)",-->
+<!--        "DYNAMIC_LOOP": "🔂 动态嵌套循环 (Dynamic)"-->
+<!--    };-->
+
+<!--    const NESTABLE_TYPES = ["DYNAMIC_LOOP", "LOOP_TASK"];-->
+<!--    const FILE_EXTENSIONS = { 'java': '.java', 'python': '.py', 'cpp': '.cpp', 'go': '.go' };-->
+<!--    const LANGUAGE_DISPLAY_NAMES = {-->
+<!--        'java': 'Java (Selenium)',-->
+<!--        'python': 'Python (Selenium)',-->
+<!--        'cpp': 'C++ (Selenium)',-->
+<!--        'go': 'Go (Selenium)'-->
+<!--    };-->
+<!--    const LEVEL_TO_BADGE = {-->
+<!--        'info': 'INFO',-->
+<!--        'data': 'DATA',-->
+<!--        'error': 'ERROR'-->
+<!--    };-->
+
+<!--    let taskData = { "url": "", "steps": [] };-->
+<!--    let currentGeneratedCode = null;-->
+<!--    let currentFileName = null;-->
+<!--    let supportedLanguages = [];-->
+<!--    let logEntries = [];-->
+<!--    let logStats = { total: 0, info: 0, data: 0, error: 0 };-->
+<!--    let draggingStep = null;-->
+<!--    let draggingStepsList = null;-->
+
+<!--    window.addEventListener('load', function() {-->
+<!--        renderAll();-->
+<!--        loadSupportedLanguages();-->
+<!--        initWebSocket();-->
+<!--        setupLogFilters();-->
+<!--    });-->
+
+<!--    document.getElementById('rootUrl').addEventListener('input', (e) => taskData.url = e.target.value);-->
+
+<!--    // 在页面关闭时清理 WebSocket-->
+<!--    window.addEventListener('beforeunload', function() {-->
+<!--        if (logWebSocket && logWebSocket.readyState === WebSocket.OPEN) {-->
+<!--            logWebSocket.close(1000, "Client closed page");-->
+<!--        }-->
+<!--    });-->
+
+<!--    function setupLogFilters() {-->
+<!--        document.getElementById('logLevelFilter').addEventListener('change', filterLogs);-->
+<!--        document.getElementById('logSearch').addEventListener('input', filterLogs);-->
+<!--    }-->
+
+<!--    async function loadSupportedLanguages() {-->
+<!--        try {-->
+<!--            const response = await fetch(API_URLS.SUPPORTED_LANGUAGES);-->
+<!--            if (response.ok) {-->
+<!--                supportedLanguages = await response.json();-->
+<!--            } else {-->
+<!--                supportedLanguages = ['java', 'python', 'cpp', 'go'];-->
+<!--                log("加载语言列表失败，使用默认列表", "info");-->
+<!--            }-->
+<!--        } catch (error) {-->
+<!--            supportedLanguages = ['java', 'python', 'cpp', 'go'];-->
+<!--            log("无法连接后端，使用默认语言列表", "info");-->
+<!--        }-->
+
+<!--        const javaIndex = supportedLanguages.indexOf('java');-->
+<!--        if (javaIndex > -1) {-->
+<!--            supportedLanguages.splice(javaIndex, 1);-->
+<!--            supportedLanguages.unshift('java');-->
+<!--        } else if (!supportedLanguages.includes('java')) {-->
+<!--            supportedLanguages.unshift('java');-->
+<!--        }-->
+
+<!--        renderLanguageSelect();-->
+<!--    }-->
+
+<!--    function renderLanguageSelect() {-->
+<!--        const select = document.getElementById('codeLang');-->
+<!--        select.innerHTML = '';-->
+<!--        supportedLanguages.forEach(lang => {-->
+<!--            const option = document.createElement('option');-->
+<!--            option.value = lang;-->
+<!--            const displayName = LANGUAGE_DISPLAY_NAMES[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);-->
+<!--            option.textContent = displayName;-->
+<!--            select.appendChild(option);-->
+<!--        });-->
+<!--        if(supportedLanguages.length > 0) select.value = supportedLanguages[0];-->
+<!--    }-->
+
+<!--    function switchTab(tabId) {-->
+<!--        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));-->
+<!--        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));-->
+
+<!--        const btn = document.querySelector(`.tab-btn[onclick="switchTab('${tabId}')"]`);-->
+<!--        if (btn) btn.classList.add('active');-->
+
+<!--        const content = document.getElementById(`tab-${tabId}`);-->
+<!--        if (content) content.classList.add('active');-->
+
+<!--        if (tabId === 'logs') {-->
+<!--            renderLogs();-->
+<!--        }-->
+<!--    }-->
+
+<!--    function renderAll() {-->
+<!--        const container = document.getElementById('stepsContainer');-->
+<!--        container.innerHTML = '';-->
+<!--        // 渲染根步骤-->
+<!--        renderSteps(taskData.steps, container, false);-->
+<!--        initDragAndDrop(); // 重新渲染后，重新绑定拖拽事件-->
+<!--    }-->
+
+<!--    function createField(step, label, key, placeholder, type = 'text', hint = '') {-->
+<!--        const div = document.createElement('div');-->
+<!--        div.className = 'form-group';-->
+<!--        div.innerHTML = `<label>${label}</label>`;-->
+<!--        const input = document.createElement('input');-->
+<!--        input.type = type;-->
+<!--        input.placeholder = placeholder || '';-->
+<!--        const initialValue = step[key] !== undefined ? step[key] : (type === 'number' ? 0 : '');-->
+<!--        input.value = initialValue;-->
+<!--        input.oninput = (e) => {-->
+<!--            const val = type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value;-->
+<!--            step[key] = val;-->
+<!--            // 如果是备注字段，更新头部显示-->
+<!--            if(key === 'remark') {-->
+<!--                const card = e.target.closest('.step-card');-->
+<!--                if (card) {-->
+<!--                    const remarkSpan = card.querySelector('.step-header span:last-child');-->
+<!--                    if (remarkSpan) remarkSpan.innerText = val || '(无备注)';-->
+<!--                }-->
+<!--            }-->
+<!--        };-->
+<!--        div.appendChild(input);-->
+<!--        if(hint) {-->
+<!--            const hintEl = document.createElement('div');-->
+<!--            hintEl.style.fontSize = '0.75rem';-->
+<!--            hintEl.style.color = '#94a3b8';-->
+<!--            hintEl.style.marginTop = '4px';-->
+<!--            hintEl.innerText = hint;-->
+<!--            div.appendChild(hintEl);-->
+<!--        }-->
+<!--        return div;-->
+<!--    };-->
+
+<!--    function renderSteps(steps, parentElement, isNested) {-->
+<!--        if (!steps || steps.length === 0) return;-->
+
+<!--        steps.forEach((step, index1) => {-->
+<!--            const card = document.createElement('div');-->
+<!--            card.className = 'step-card';-->
+<!--            card.dataset.index = index1;-->
+<!--            card.dataset.listId = parentElement.id || 'nested';-->
+<!--            card.stepData = step;-->
+<!--            card.stepsList = steps;-->
+
+<!--            // -&#45;&#45; 头部 (可拖拽区域) -&#45;&#45;-->
+<!--            const header = document.createElement('div');-->
+<!--            header.className = 'step-header';-->
+<!--            header.draggable = true;-->
+
+<!--            // 绑定拖拽事件到 header-->
+<!--            header.addEventListener('dragstart', handleDragStart);-->
+<!--            header.addEventListener('dragend', handleDragEnd);-->
+
+
+<!--            const leftHeader = document.createElement('div');-->
+<!--            leftHeader.style.display = 'flex';-->
+<!--            leftHeader.style.alignItems = 'center';-->
+<!--            leftHeader.innerHTML = `<span class="step-badge">#${index1 + 1}</span>`;-->
+
+<!--            const typeSelect = document.createElement('select');-->
+<!--            typeSelect.style.width = '240px';-->
+<!--            typeSelect.style.fontWeight = 'bold';-->
+<!--            for (const [key, label] of Object.entries(TYPE_LABELS)) {-->
+<!--                const opt = document.createElement('option');-->
+<!--                opt.value = key;-->
+<!--                opt.text = label;-->
+<!--                if (key === step.type) opt.selected = true;-->
+<!--                typeSelect.appendChild(opt);-->
+<!--            }-->
+<!--            typeSelect.onchange = (e) => {-->
+<!--                step.type = e.target.value;-->
+<!--                if (NESTABLE_TYPES.includes(step.type) && !step.subSteps) step.subSteps = [];-->
+<!--                // 强制重新渲染，因为字段会变化-->
+<!--                renderAll();-->
+<!--            };-->
+<!--            leftHeader.appendChild(typeSelect);-->
+
+<!--            const remarkSpan = document.createElement('span');-->
+<!--            remarkSpan.style.marginLeft = '15px';-->
+<!--            remarkSpan.style.color = 'var(&#45;&#45;text-sub)';-->
+<!--            remarkSpan.style.fontSize = '0.9rem';-->
+<!--            remarkSpan.innerText = step.remark || '(无备注)';-->
+<!--            leftHeader.appendChild(remarkSpan);-->
+<!--            header.appendChild(leftHeader);-->
+
+<!--            const delBtn = document.createElement('button');-->
+<!--            delBtn.className = 'btn btn-danger';-->
+<!--            delBtn.style.padding = '4px 10px';-->
+<!--            delBtn.style.fontSize = '0.8rem';-->
+<!--            delBtn.innerText = '删除';-->
+<!--            delBtn.onclick = () => {-->
+<!--                if(confirm('确定删除此步骤？')) {-->
+<!--                    steps.splice(index1, 1);-->
+<!--                    renderAll();-->
+<!--                }-->
+<!--            };-->
+<!--            header.appendChild(delBtn);-->
+<!--            card.appendChild(header);-->
+
+<!--            // -&#45;&#45; 表单生成器 -&#45;&#45;-->
+<!--            const grid = document.createElement('div');-->
+<!--            grid.className = 'form-grid';-->
+
+<!--            grid.appendChild(createField(step, '备注', 'remark', '描述此步骤的作用...'));-->
+
+<!--            const t = step.type;-->
+<!--            const elements = [];-->
+
+<!--            // -&#45;&#45; START MODIFICATION -&#45;&#45;-->
+<!--            // 移除了 KEYBOARD_INPUT-->
+<!--            const noXpathTypes = ['WAIT', 'CLOSE_TAB', 'GO_BACK', 'NAVIGATE', 'DYNAMIC_LOOP', 'IMPORT_COOKIE', 'GET_CURRENT_URL', 'HANDLE_ALERT', 'PRESS_KEYS'];-->
+<!--            if (!noXpathTypes.includes(t)) {-->
+<!--                // -&#45;&#45; END MODIFICATION -&#45;&#45;-->
+<!--                elements.push(createField(step, 'XPath / 定位符', 'xpath', '//div[@id="btn"]'));-->
+
+<!--                // === 占位符提示 ===-->
+<!--                const needsPrompt = ['INPUT', 'CLICK', 'GET_TEXT'].includes(t) || t === 'KEYBOARD_INPUT'; // KEYBOARD_INPUT 可能会用到占位符-->
+<!--                const isLoopType = t.startsWith('LOOP');-->
+
+<!--                if (isNested || isLoopType || needsPrompt) {-->
+<!--                    const hintDiv = document.createElement('div');-->
+<!--                    hintDiv.style.gridColumn = '1 / -1'; // 跨列显示-->
+<!--                    hintDiv.style.fontSize = '0.85rem';-->
+<!--                    hintDiv.style.color = 'var(&#45;&#45;primary)';-->
+<!--                    hintDiv.style.backgroundColor = '#e0f2fe';-->
+<!--                    hintDiv.style.padding = '8px 10px';-->
+<!--                    hintDiv.style.borderRadius = '4px';-->
+<!--                    hintDiv.style.borderLeft = '3px solid var(&#45;&#45;primary)';-->
+
+<!--                    let baseHint = '💡 提示：XPath/输入内容 默认支持 {i}, {index} 占位符。';-->
+
+<!--                    if (isLoopType) {-->
+<!--                        baseHint += '  (循环步骤内置, 默认值 1) ';-->
+<!--                    } else if (t === 'DYNAMIC_LOOP') {-->
+<!--                        baseHint += '  (默认值 0) ';-->
+<!--                    } else if (needsPrompt && isNested) {-->
+<!--                        baseHint += ' (作为子步骤，可以使用动态循环的占位符操作元素)';-->
+<!--                    }-->
+
+<!--                    if (needsPrompt || isLoopType || t === 'DYNAMIC_LOOP') {-->
+<!--                        hintDiv.innerHTML = baseHint;-->
+<!--                        elements.push(hintDiv);-->
+<!--                    }-->
+<!--                }-->
+<!--                // =================================-->
+<!--            }-->
+
+<!--            const hasValueField = ['INPUT', 'NAVIGATE', 'LOOP_INPUT', 'DYNAMIC_LOOP', 'LOOP_TASK', 'PRESS_KEYS', 'KEYBOARD_INPUT'].includes(t) || step.value !== undefined;-->
+<!--            if (hasValueField) {-->
+<!--                let label = '值 / 参数';-->
+<!--                let ph = '输入值';-->
+<!--                let hint = '';-->
+
+<!--                if (t === 'NAVIGATE') { label = '跳转 URL 地址'; ph = 'https://...'; }-->
+<!--                else if (t === 'INPUT' || t === 'LOOP_INPUT') { label = '输入内容'; ph = '要输入的文本'; }-->
+<!--                else if (t === 'PRESS_KEYS') { label = '按键组合'; ph = '例如：CTRL+A (全选)'; hint = '支持组合键，如 CONTROL, ALT, SHIFT'; }-->
+<!--                else if (t === 'KEYBOARD_INPUT') { label = '输入内容'; ph = '直接敲击键盘的内容'; hint = '可以穿插按键代码，如：Hello{ENTER}World. **需要XPath指定输入框**'; } // 提示 XPath 需求-->
+
+<!--                elements.push(createField(step, label, 'value', ph, 'text', hint));-->
+<!--            }-->
+
+<!--            if (t === 'HANDLE_ALERT') {-->
+<!--                elements.push(createField(step, '输入弹窗文本 (可选)', 'alertText', '若弹窗需要输入，请填写'));-->
+
+<!--                const divAlert = document.createElement('div');-->
+<!--                divAlert.className = 'form-group';-->
+<!--                divAlert.innerHTML = `<label>处理方式</label>`;-->
+<!--                const sel = document.createElement('select');-->
+<!--                const optYes = document.createElement('option'); optYes.value = 'true'; optYes.text = '确认 / 接受 (Accept)';-->
+<!--                const optNo = document.createElement('option'); optNo.value = 'false'; optNo.text = '取消 / 拒绝 (Dismiss)';-->
+
+<!--                if (step.acceptAlert === false || step.acceptAlert === 'false') {-->
+<!--                    optNo.selected = true;-->
+<!--                    step.acceptAlert = false;-->
+<!--                } else {-->
+<!--                    optYes.selected = true;-->
+<!--                    step.acceptAlert = true;-->
+<!--                }-->
+
+<!--                sel.appendChild(optYes);-->
+<!--                sel.appendChild(optNo);-->
+<!--                sel.onchange = (e) => { step.acceptAlert = (e.target.value === 'true'); };-->
+<!--                divAlert.appendChild(sel);-->
+<!--                elements.push(divAlert);-->
+<!--            }-->
+
+<!--            if (t === 'IMPORT_COOKIE') {-->
+<!--                elements.push(createField(step, 'Cookie 文件路径', 'filePath', 'C:/cookies.txt'));-->
+<!--            }-->
+
+<!--            if (t === 'LOOP_GET_TEXT') {-->
+<!--                elements.push(createField(step, '输出文件路径', 'filePath', 'output/text_list.txt', 'text', '抓取的文本将追加写入此文件'));-->
+<!--            }-->
+
+<!--            const isLoop = t.startsWith('LOOP') || t === 'DYNAMIC_LOOP';-->
+<!--            if (isLoop) {-->
+<!--                if (['DYNAMIC_LOOP', 'LOOP_TASK'].includes(t)) {-->
+<!--                    if (step.iterations === undefined) step.iterations = 3;-->
+<!--                    elements.push(createField(step, '循环次数', 'iterations', '3', 'number'));-->
+<!--                } else {-->
+<!--                    if (step.startIndex === undefined) step.startIndex = 1;-->
+<!--                    if (step.endIndex === undefined) step.endIndex = 5;-->
+<!--                    elements.push(createField(step, '起始索引', 'startIndex', '1', 'number'));-->
+<!--                    elements.push(createField(step, '结束索引', 'endIndex', '5', 'number'));-->
+<!--                }-->
+<!--            }-->
+
+<!--            // 确保 waitBeforeMs 和 waitAfterMs 定义-->
+<!--            if (step.waitBeforeMs === undefined) step.waitBeforeMs = 0;-->
+<!--            if (step.waitAfterMs === undefined) step.waitAfterMs = 500;-->
+
+<!--            // 将等待时间放在最后-->
+<!--            elements.push(createField(step, '前置等待(ms)', 'waitBeforeMs', '0', 'number'));-->
+<!--            elements.push(createField(step, '后置等待(ms)', 'waitAfterMs', '500', 'number'));-->
+
+<!--            elements.forEach(el => grid.appendChild(el));-->
+
+<!--            card.appendChild(grid);-->
+
+<!--            // -&#45;&#45; 嵌套子步骤 -&#45;&#45;-->
+<!--            if (NESTABLE_TYPES.includes(t)) {-->
+<!--                const nestedArea = document.createElement('div');-->
+<!--                nestedArea.className = 'nested-area';-->
+
+<!--                //  拖拽：设置 nestedArea 为拖放目标容器-->
+<!--                nestedArea.stepsList = step.subSteps;-->
+<!--                nestedArea.classList.add('steps-list');-->
+<!--                nestedArea.addEventListener('dragover', handleDragOver);-->
+<!--                nestedArea.addEventListener('dragleave', handleDragLeave);-->
+<!--                nestedArea.addEventListener('drop', handleDrop);-->
+
+
+<!--                const nestedHead = document.createElement('div');-->
+<!--                nestedHead.style.display = 'flex';-->
+<!--                nestedHead.style.justifyContent = 'space-between';-->
+<!--                nestedHead.style.marginBottom = '10px';-->
+<!--                nestedHead.innerHTML = `<strong style="color:var(&#45;&#45;primary)">子任务流程</strong>`;-->
+
+<!--                const addSub = document.createElement('button');-->
+<!--                addSub.className = 'btn btn-secondary';-->
+<!--                addSub.style.fontSize = '0.8rem';-->
+<!--                addSub.style.padding = '4px 10px';-->
+<!--                addSub.innerText = '+ 添加子步骤';-->
+<!--                addSub.onclick = () => {-->
+<!--                    if (!step.subSteps) step.subSteps = [];-->
+<!--                    step.subSteps.push({ type: 'CLICK', waitBeforeMs: 0, waitAfterMs: 500, remark: '子操作' });-->
+<!--                    renderAll();-->
+<!--                };-->
+<!--                nestedHead.appendChild(addSub);-->
+<!--                nestedArea.appendChild(nestedHead);-->
+
+<!--                if (step.subSteps && step.subSteps.length > 0) {-->
+<!--                    renderSteps(step.subSteps, nestedArea, true); // 递归调用，设置 isNested 为 true-->
+<!--                } else {-->
+<!--                    const tip = document.createElement('div');-->
+<!--                    tip.style.color = '#94a3b8';-->
+<!--                    tip.style.textAlign = 'center';-->
+<!--                    tip.innerText = '暂无子步骤';-->
+<!--                    nestedArea.appendChild(tip);-->
+<!--                }-->
+<!--                card.appendChild(nestedArea);-->
+<!--            }-->
+
+<!--            parentElement.appendChild(card);-->
+<!--        });-->
+<!--    }-->
+
+<!--    //  新增/更新：拖拽功能初始化-->
+<!--    function initDragAndDrop() {-->
+<!--        const rootContainer = document.getElementById('stepsContainer');-->
+<!--        rootContainer.classList.add('steps-list');-->
+
+<!--        // 确保根容器也是拖放目标-->
+<!--        rootContainer.addEventListener('dragover', handleDragOver);-->
+<!--        rootContainer.addEventListener('dragleave', handleDragLeave);-->
+<!--        rootContainer.addEventListener('drop', handleDrop);-->
+<!--        rootContainer.stepsList = taskData.steps;-->
+
+<!--    }-->
+
+<!--    function handleDragStart(e) {-->
+<!--        const header = e.currentTarget;-->
+<!--        const card = header.closest('.step-card');-->
+
+<!--        if (!card) return;-->
+
+<!--        draggingStep = card.stepData;-->
+<!--        draggingStepsList = card.stepsList;-->
+
+<!--        e.dataTransfer.effectAllowed = 'move';-->
+<!--        e.dataTransfer.setData('text/plain', card.dataset.index);-->
+<!--        card.classList.add('dragging');-->
+
+<!--        const dragImg = document.createElement('div');-->
+<!--        dragImg.style.width = '1px';-->
+<!--        dragImg.style.height = '1px';-->
+<!--        e.dataTransfer.setDragImage(dragImg, 0, 0);-->
+<!--    }-->
+
+<!--    function handleDragEnd(e) {-->
+<!--        document.querySelectorAll('.step-card').forEach(c => c.classList.remove('dragging'));-->
+<!--        document.querySelectorAll('.drag-over-indicator').forEach(i => i.remove());-->
+<!--        draggingStep = null;-->
+<!--        draggingStepsList = null;-->
+<!--    }-->
+
+<!--    function handleDragOver(e) {-->
+<!--        e.preventDefault();-->
+<!--        if (!e.target.closest('.steps-list') || !draggingStep) return;-->
+
+<!--        const container = e.currentTarget;-->
+<!--        e.dataTransfer.dropEffect = 'move';-->
+
+<!--        // 移除旧的指示器-->
+<!--        container.querySelectorAll('.drag-over-indicator').forEach(i => i.remove());-->
+
+<!--        // 查找最接近的步骤卡片-->
+<!--        const afterElement = getDragAfterElement(container, e.clientY);-->
+
+<!--        // 创建新的指示器-->
+<!--        const indicator = document.createElement('div');-->
+<!--        indicator.className = 'drag-over-indicator';-->
+
+<!--        if (afterElement == null) {-->
+<!--            // 放置在列表末尾-->
+<!--            container.appendChild(indicator);-->
+<!--        } else if (afterElement.classList.contains('step-card')) {-->
+<!--            // 放置在某个卡片之前-->
+<!--            container.insertBefore(indicator, afterElement);-->
+<!--        } else if (container.id === 'stepsContainer' || container.classList.contains('nested-area')) {-->
+<!--            // 放置在空容器或嵌套区的头部 (afterElement为null)-->
+<!--            const firstCard = Array.from(container.children).find(c => c.classList.contains('step-card'));-->
+<!--            if (firstCard) {-->
+<!--                container.insertBefore(indicator, firstCard);-->
+<!--            } else {-->
+<!--                const nestedHead = container.querySelector('strong');-->
+<!--                if(nestedHead && nestedHead.parentNode) {-->
+<!--                    container.appendChild(indicator);-->
+<!--                } else {-->
+<!--                    container.appendChild(indicator);-->
+<!--                }-->
+<!--            }-->
+<!--        }-->
+<!--    }-->
+
+<!--    function handleDragLeave(e) {-->
+<!--        e.currentTarget.querySelectorAll('.drag-over-indicator').forEach(i => i.remove());-->
+<!--    }-->
+
+<!--    function handleDrop(e) {-->
+<!--        e.preventDefault();-->
+<!--        const dropTarget = e.currentTarget;-->
+<!--        dropTarget.querySelectorAll('.drag-over-indicator').forEach(i => i.remove());-->
+
+<!--        if (!draggingStep) return;-->
+
+<!--        const currentList = draggingStepsList;-->
+<!--        const targetList = dropTarget.stepsList || taskData.steps;-->
+
+<!--        const oldIndex = currentList.indexOf(draggingStep);-->
+<!--        let newIndex = -1;-->
+
+<!--        // 确定放置位置-->
+<!--        const afterElement = getDragAfterElement(dropTarget, e.clientY);-->
+
+<!--        // 如果拖拽的是嵌套步骤到根步骤，或反之，需要进行数组间的移动。-->
+<!--        if (currentList !== targetList) {-->
+<!--            // 1. 从原数组移除-->
+<!--            currentList.splice(oldIndex, 1);-->
+<!--            log(`步骤 [${draggingStep.remark}] 从原列表移除`, 'info');-->
+
+<!--            // 2. 确定新索引-->
+<!--            // 需要过滤出属于目标数组的步骤卡片-->
+<!--            const cards = Array.from(dropTarget.querySelectorAll('.step-card')).filter(c => c.stepsList === targetList);-->
+<!--            if (afterElement === null) {-->
+<!--                newIndex = targetList.length; // 放在末尾-->
+<!--            } else {-->
+<!--                // 确保 afterElement 是目标列表中的一个卡片-->
+<!--                const targetCard = afterElement.closest('.step-card');-->
+<!--                if (targetCard && targetCard.stepsList === targetList) {-->
+<!--                    newIndex = targetList.indexOf(targetCard.stepData);-->
+<!--                } else {-->
+<!--                    newIndex = targetList.length; // 找不到目标卡片，默认末尾-->
+<!--                }-->
+<!--            }-->
+
+<!--            // 3. 插入到新数组-->
+<!--            targetList.splice(newIndex, 0, draggingStep);-->
+<!--            log(`步骤 [${draggingStep.remark}] 移动到新列表索引 ${newIndex}`, 'info');-->
+
+<!--        } else {-->
+<!--            // 数组内移动-->
+<!--            if (afterElement === null) {-->
+<!--                newIndex = currentList.length - 1; // 放在末尾-->
+<!--            } else {-->
+<!--                const targetCard = afterElement.closest('.step-card');-->
+<!--                newIndex = currentList.indexOf(targetCard.stepData);-->
+<!--            }-->
+
+<!--            // 执行数组移动操作-->
+<!--            if (oldIndex < newIndex) {-->
+<!--                newIndex&#45;&#45;; // 如果是从上往下拖，目标索引需要减1-->
+<!--            }-->
+
+<!--            // 只有当位置确实发生变化时才操作数组-->
+<!--            if (oldIndex !== newIndex) {-->
+<!--                const [removed] = currentList.splice(oldIndex, 1);-->
+<!--                currentList.splice(newIndex, 0, removed);-->
+<!--                log(`步骤 [${removed.remark}] 移动到索引 ${newIndex}`, 'info');-->
+<!--            }-->
+<!--        }-->
+
+<!--        // 重新渲染整个步骤列表以同步数据和界面-->
+<!--        renderAll();-->
+<!--    }-->
+
+<!--    // 查找拖拽位置后面的元素-->
+<!--    function getDragAfterElement(container, y) {-->
+<!--        // 查找所有非拖拽中的步骤卡片-->
+<!--        const draggableElements = Array.from(container.querySelectorAll('.step-card:not(.dragging)'));-->
+
+<!--        return draggableElements.reduce((closest, child) => {-->
+<!--            const box = child.getBoundingClientRect();-->
+<!--            const offset = y - box.top - box.height / 2;-->
+<!--            if (offset < 0 && offset > closest.offset) {-->
+<!--                return { offset: offset, element: child };-->
+<!--            } else {-->
+<!--                return closest;-->
+<!--            }-->
+<!--        }, { offset: Number.NEGATIVE_INFINITY }).element;-->
+<!--    }-->
+
+
+<!--    function addRootStep() {-->
+<!--        taskData.steps.push({-->
+<!--            type: 'WAIT',-->
+<!--            waitBeforeMs: 0,-->
+<!--            waitAfterMs: 1000,-->
+<!--            remark: '新步骤'-->
+<!--        });-->
+<!--        renderAll();-->
+<!--        setTimeout(() => {-->
+<!--            const container = document.getElementById('stepsContainer');-->
+<!--            container.lastElementChild?.scrollIntoView({ behavior: 'smooth' });-->
+<!--        }, 100);-->
+<!--    }-->
+
+
+<!--    function exportJson() {-->
+<!--        taskData.url = document.getElementById('rootUrl').value;-->
+<!--        const fileNameInput = document.getElementById('exportFileName').value.trim();-->
+<!--        const fileName = fileNameInput ? fileNameInput : `auto_config_${Date.now()}`;-->
+
+<!--        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(taskData, null, 2));-->
+<!--        const anchor = document.createElement('a');-->
+<!--        anchor.href = dataStr;-->
+<!--        anchor.download = `${fileName}.json`;-->
+<!--        anchor.click();-->
+<!--        log(`已导出配置文件: ${fileName}.json`, "info");-->
+<!--    }-->
+
+<!--    function triggerImport() { document.getElementById('fileInput').click(); }-->
+
+<!--    function handleFileImport(input) {-->
+<!--        const file = input.files[0];-->
+<!--        if (!file) return;-->
+<!--        const reader = new FileReader();-->
+<!--        reader.onload = (e) => {-->
+<!--            try {-->
+<!--                const json = JSON.parse(e.target.result);-->
+<!--                if (Array.isArray(json.steps)) {-->
+<!--                    taskData = json;-->
+<!--                    document.getElementById('rootUrl').value = taskData.url || '';-->
+<!--                    renderAll();-->
+<!--                    showToast('✅ 导入成功', 'success');-->
+<!--                    log("成功导入 JSON 配置", "info");-->
+<!--                } else {-->
+<!--                    showToast('❌ JSON 格式错误', 'error');-->
+<!--                    log("导入失败: JSON 缺少 steps 数组", "error");-->
+<!--                }-->
+<!--            } catch (err) {-->
+<!--                showToast('❌ 解析失败', 'error');-->
+<!--                log(`导入失败: ${err.message}`, "error");-->
+<!--            }-->
+<!--            input.value = '';-->
+<!--        };-->
+<!--        reader.readAsText(file);-->
+<!--    }-->
+
+
+<!--    async function validateSteps() {-->
+<!--        log("开始校验流程...", "info");-->
+<!--        await sendTaskRequest(API_URLS.VALIDATE, "校验");-->
+<!--    }-->
+
+<!--    async function executeSteps() {-->
+<!--        if(!confirm("⚠️ 确定要开始执行任务吗？浏览器将自动操作。")) return;-->
+
+<!--        if (!isWebSocketConnected) {-->
+<!--            log('⚠️ WebSocket 未连接，将无法接收实时日志', 'warning');-->
+<!--            if (!confirm('实时日志连接异常，是否继续执行？')) return;-->
+<!--        }-->
+
+<!--        log("任务开始执行...", "info");-->
+<!--        await sendTaskRequest(API_URLS.EXECUTE, "执行");-->
+<!--    }-->
+
+<!--    async function sendTaskRequest(url, actionName) {-->
+<!--        taskData.url = document.getElementById('rootUrl').value;-->
+<!--        if (!taskData.url) {-->
+<!--            log("错误: 未填写起始 URL", "error");-->
+<!--            return showToast('请填写起始 URL', 'error');-->
+<!--        }-->
+<!--        if (taskData.steps.length === 0) {-->
+<!--            log("错误: 步骤列表为空", "error");-->
+<!--            return showToast('步骤不能为空', 'error');-->
+<!--        }-->
+
+<!--        showToast(`⏳ 正在${actionName}...`, 'primary', 2000);-->
+
+<!--        try {-->
+<!--            const res = await fetch(url, {-->
+<!--                method: 'POST',-->
+<!--                headers: { 'Content-Type': 'application/json' },-->
+<!--                body: JSON.stringify(taskData)-->
+<!--            });-->
+<!--            const text = await res.text();-->
+
+<!--            if (res.ok) {-->
+<!--                showToast(`✅ ${actionName}成功`, 'success');-->
+<!--                log(`${actionName}成功! 后端响应:\n${text}`, "info");-->
+<!--            } else {-->
+<!--                showToast(`❌ ${actionName}失败`, 'error');-->
+<!--                log(`${actionName}失败! 错误信息:\n${text}`, "error");-->
+<!--            }-->
+<!--        } catch (e) {-->
+<!--            showToast(`网络请求异常`, 'error');-->
+<!--            log(`请求异常: ${e.message}`, "error");-->
+<!--        }-->
+<!--    }-->
+
+
+<!--    async function exportCookie() {-->
+<!--        const urlVal = document.getElementById('cookieUrl').value.trim();-->
+<!--        const waitVal = document.getElementById('cookieWait').value;-->
+<!--        const pathVal = document.getElementById('cookiePath').value.trim();-->
+
+<!--        if (!urlVal || !waitVal || !pathVal) {-->
+<!--            showToast('❌ 请填写所有必填字段', 'error');-->
+<!--            return;-->
+<!--        }-->
+
+<!--        if (!isWebSocketConnected) {-->
+<!--            log('⚠️ WebSocket 未连接，将无法接收实时日志', 'warning');-->
+<!--            if (!confirm('实时日志连接异常，是否继续执行？')) return;-->
+<!--        }-->
+
+<!--        const req = {-->
+<!--            url: urlVal,-->
+<!--            waitSeconds: parseInt(waitVal),-->
+<!--            filePath: pathVal-->
+<!--        };-->
+
+<!--        showToast('⏳ 正在启动浏览器提取 Cookie...', 'primary', 5000);-->
+<!--        log(`启动 Cookie 提取任务: 目标=${urlVal}, 等待=${waitVal}s, 路径=${pathVal}`, "info");-->
+
+<!--        try {-->
+<!--            const res = await fetch(API_URLS.EXPORT_COOKIE, {-->
+<!--                method: 'POST',-->
+<!--                headers: { 'Content-Type': 'application/json' },-->
+<!--                body: JSON.stringify(req)-->
+<!--            });-->
+<!--            const text = await res.text();-->
+<!--            if (res.ok) {-->
+<!--                showToast(`✅ Cookie 导出成功!`, 'success');-->
+<!--                log(`Cookie 导出成功: ${text}`, "info");-->
+<!--            } else {-->
+<!--                showToast(`❌ 导出失败: ${text}`, 'error');-->
+<!--                log(`Cookie 导出失败: ${text}`, "error");-->
+<!--            }-->
+<!--        } catch (e) {-->
+<!--            showToast(`网络错误`, 'error');-->
+<!--            log(`Cookie 任务异常: ${e.message}`, "error");-->
+<!--        }-->
+<!--    }-->
+
+
+<!--    async function generateCodePreview() {-->
+<!--        if (taskData.steps.length === 0) return showToast('请先在"流程编排"中添加步骤', 'error');-->
+<!--        const lang = document.getElementById('codeLang').value;-->
+<!--        if (!lang) return showToast('请选择编程语言', 'error');-->
+
+<!--        const req = {-->
+<!--            language: lang,-->
+<!--            steps: taskData.steps,-->
+<!--            initialUrl: document.getElementById('rootUrl').value || "https://example.com",-->
+<!--            className: document.getElementById('codeClassName').value || "AutoTask",-->
+<!--            includeComments: document.getElementById('codeComments').checked-->
+<!--        };-->
+
+<!--        showToast('⏳ 生成代码中...', 'primary');-->
+<!--        log(`正在生成 ${lang} 代码预览...`, "info");-->
+
+<!--        try {-->
+<!--            const res = await fetch(API_URLS.GENERATE_PREVIEW, {-->
+<!--                method: 'POST',-->
+<!--                headers: { 'Content-Type': 'application/json' },-->
+<!--                body: JSON.stringify(req)-->
+<!--            });-->
+
+<!--            if (res.ok) {-->
+<!--                const codeText = await res.text();-->
+<!--                currentGeneratedCode = codeText;-->
+<!--                currentFileName = `${req.className}${FILE_EXTENSIONS[lang] || '.txt'}`;-->
+
+<!--                document.getElementById('codePreview').textContent = codeText;-->
+<!--                document.getElementById('fileNameInfo').textContent = `文件名: ${currentFileName}`;-->
+<!--                document.getElementById('fileSizeInfo').textContent = ` | 大小: ${(codeText.length / 1024).toFixed(2)} KB`;-->
+<!--                document.getElementById('languageInfo').textContent = ` | 语言: ${lang.toUpperCase()}`;-->
+
+<!--                document.getElementById('downloadBtn').disabled = false;-->
+<!--                document.getElementById('codeActions').style.display = 'flex';-->
+<!--                showToast('✅ 代码生成成功', 'success');-->
+<!--                log("代码预览生成完毕", "info");-->
+<!--            } else {-->
+<!--                const err = await res.text();-->
+<!--                showToast(`❌ 生成失败`, 'error');-->
+<!--                log(`代码生成失败: ${err}`, "error");-->
+<!--            }-->
+<!--        } catch (e) {-->
+<!--            log(`请求错误: ${e.message}`, "error");-->
+<!--        }-->
+<!--    }-->
+
+<!--    async function downloadCode() {-->
+<!--        if (!currentGeneratedCode) return showToast('请先生成代码预览', 'error');-->
+<!--        const lang = document.getElementById('codeLang').value;-->
+<!--        const req = {-->
+<!--            language: lang,-->
+<!--            steps: taskData.steps,-->
+<!--            initialUrl: document.getElementById('rootUrl').value || "https://example.com",-->
+<!--            className: document.getElementById('codeClassName').value || "AutoTask",-->
+<!--            includeComments: document.getElementById('codeComments').checked-->
+<!--        };-->
+
+<!--        try {-->
+<!--            const res = await fetch(API_URLS.GENERATE_DOWNLOAD, {-->
+<!--                method: 'POST',-->
+<!--                headers: { 'Content-Type': 'application/json' },-->
+<!--                body: JSON.stringify(req)-->
+<!--            });-->
+<!--            if (res.ok) {-->
+<!--                const blob = await res.blob();-->
+<!--                const url = window.URL.createObjectURL(blob);-->
+<!--                const a = document.createElement('a');-->
+<!--                a.href = url;-->
+<!--                a.download = currentFileName;-->
+<!--                a.click();-->
+<!--                window.URL.revokeObjectURL(url);-->
+<!--                log(`源码文件下载成功: ${currentFileName}`, "info");-->
+<!--            } else {-->
+<!--                const err = await res.text();-->
+<!--                log(`下载请求失败: ${err}`, "error");-->
+<!--            }-->
+<!--        } catch (e) { log(`下载失败: ${e.message}`, "error"); }-->
+<!--    }-->
+
+<!--    function copyCode() {-->
+<!--        if (!currentGeneratedCode) return;-->
+<!--        navigator.clipboard.writeText(currentGeneratedCode).then(() => {-->
+<!--            showToast('✅ 已复制', 'success');-->
+<!--        });-->
+<!--    }-->
+
+
+<!--    function log(message, level = 'info') {-->
+<!--        const now = new Date();-->
+<!--        const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;-->
+
+<!--        const logEntry = {-->
+<!--            id: Date.now() + Math.random(),-->
+<!--            time: timeStr,-->
+<!--            message: message,-->
+<!--            level: level,-->
+<!--            timestamp: now.getTime()-->
+<!--        };-->
+
+<!--        logEntries.push(logEntry);-->
+
+<!--        updateLogStats(level);-->
+
+<!--        // 只有当日志标签页是激活状态时才实时渲染，否则只更新数据-->
+<!--        if (document.getElementById('tab-logs').classList.contains('active')) {-->
+<!--            renderLogs();-->
+<!--        }-->
+
+<!--        const consoleFunc = level === 'data' ? console.warn : (level === 'error' ? console.error : console.log);-->
+<!--        consoleFunc(`[${level.toUpperCase()}] ${timeStr}: ${message}`);-->
+<!--    }-->
+
+<!--    function renderLogs() {-->
+<!--        const content = document.getElementById('logContent');-->
+<!--        const levelFilter = document.getElementById('logLevelFilter').value;-->
+<!--        const searchTerm = document.getElementById('logSearch').value.toLowerCase();-->
+
+<!--        //  更新统计显示，包含 ERROR-->
+<!--        document.getElementById('logTotal').textContent = `总计: ${logStats.total} 条`;-->
+<!--        document.getElementById('logInfo').textContent = `信息 (INFO): ${logStats.info} 条`;-->
+<!--        document.getElementById('logData').textContent = `数据 (DATA): ${logStats.data} 条`;-->
+<!--        document.getElementById('logError').textContent = `错误 (ERROR): ${logStats.error} 条`;-->
+
+<!--        const filteredLogs = logEntries.filter(entry => {-->
+<!--            const levelMatch = levelFilter === 'all' || entry.level === levelFilter;-->
+<!--            const searchMatch = !searchTerm ||-->
+<!--                entry.message.toLowerCase().includes(searchTerm) ||-->
+<!--                entry.time.includes(searchTerm);-->
+<!--            return levelMatch && searchMatch;-->
+<!--        });-->
+
+<!--        content.innerHTML = '';-->
+<!--        filteredLogs.forEach(entry => {-->
+<!--            const entryEl = document.createElement('div');-->
+<!--            entryEl.className = `log-entry ${entry.level}`;-->
+
+<!--            const timeSpan = `<span class="time">${entry.time}</span>`;-->
+<!--            const badge = `<span class="log-level-badge">${LEVEL_TO_BADGE[entry.level] || entry.level.toUpperCase()}</span>`;-->
+
+<!--            const messageBody = `<span class="log-message">${entry.message.replace(/\n/g, '<br>')}</span>`;-->
+
+<!--            entryEl.innerHTML = `${timeSpan}${badge}${messageBody}`;-->
+<!--            content.appendChild(entryEl);-->
+<!--        });-->
+
+<!--        content.scrollTop = content.scrollHeight;-->
+<!--    }-->
+
+<!--    function updateLogStats(level) {-->
+<!--        logStats.total++;-->
+<!--        if (logStats.hasOwnProperty(level)) {-->
+<!--            logStats[level]++;-->
+<!--        }-->
+<!--    }-->
+
+<!--    function filterLogs() {-->
+<!--        renderLogs();-->
+<!--    }-->
+
+<!--    function clearLog() {-->
+<!--        logEntries = [];-->
+<!--        // 清空 logStats 时包含 error-->
+<!--        logStats = { total: 0, info: 0, data: 0, error: 0 };-->
+<!--        renderLogs();-->
+<!--        log('日志已清空', 'info');-->
+<!--    }-->
+
+<!--    function exportLogs() {-->
+<!--        if (logEntries.length === 0) {-->
+<!--            showToast('没有日志可导出', 'warning');-->
+<!--            return;-->
+<!--        }-->
+
+<!--        let logText = "自动化控制台系统日志导出\n";-->
+<!--        logText += `导出时间: ${new Date().toLocaleString()}\n`;-->
+<!--        logText += `日志总数: ${logStats.total} (信息:${logStats.info} 数据:${logStats.data} 错误:${logStats.error})\n\n`;-->
+
+<!--        logEntries.forEach(entry => {-->
+<!--            logText += `[${entry.time}] [${entry.level.toUpperCase()}] ${entry.message}\n`;-->
+<!--        });-->
+
+<!--        const blob = new Blob([logText], { type: 'text/plain' });-->
+<!--        const url = window.URL.createObjectURL(blob);-->
+<!--        const a = document.createElement('a');-->
+<!--        a.href = url;-->
+<!--        a.download = `automation_logs_${Date.now()}.txt`;-->
+<!--        a.click();-->
+<!--        window.URL.revokeObjectURL(url);-->
+
+<!--        log(`日志已导出，共 ${logEntries.length} 条记录`, "info");-->
+<!--    }-->
+
+<!--    function showToast(msg, type = 'primary', duration = 3000) {-->
+<!--        const t = document.getElementById('toast');-->
+<!--        t.innerText = msg;-->
+<!--        t.style.display = 'block';-->
+<!--        let bg = 'var(&#45;&#45;primary)';-->
+<!--        if(type === 'success') bg = 'var(&#45;&#45;success)';-->
+<!--        if(type === 'error') bg = 'var(&#45;&#45;danger)';-->
+<!--        if(type === 'warning') bg = 'var(&#45;&#45;warning)';-->
+<!--        t.style.backgroundColor = bg;-->
+<!--        if (duration > 0) setTimeout(() => t.style.display = 'none', duration);-->
+<!--    }-->
+<!--</script>-->
